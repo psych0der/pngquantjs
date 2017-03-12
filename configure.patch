@@ -1,0 +1,15 @@
+--- configure.orig	2017-03-12 23:08:55.000000000 +0530
++++ configure	2017-03-12 23:09:25.000000000 +0530
+@@ -247,9 +247,9 @@
+ echo
+ 
+ # /tmp, because mingw has problems opening /dev/null and gives false negative
+-if ! echo "int main(){}" | "$CC" -xc -std=c99 -o /tmp/gcccheck - > /dev/null; then
+-    error "Compiler" "$CC failed to compile anything (make sure it's installed and supports C99)"
+-fi
++# if ! echo "int main(){}" | "$CC" -xc -std=c99 -o /tmp/gcccheck - > /dev/null; then
++#     error "Compiler" "$CC failed to compile anything (make sure it's installed and supports C99)"
++# fi
+ 
+ status "Compiler" "$CC"
+ 
