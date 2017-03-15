@@ -1,7 +1,7 @@
 (function() {
 
     /* Import pngquant.js synchronously */
-    importScripts('pngquant.js');
+    importScripts('pngquant.min.js');
 
     /* storing initial date*/
     var now = Date.now;
