@@ -158,14 +158,12 @@
         outputElement = $("#output");
         initWorker();
         $('#filePicker').onchange = function(e) {
-            e.preventDefault();
-            var input = $('#filePicker');
-            if (input.files && input.files[0]) {
-                if (!input.files[0].name.match(/.(png)$/i)) {
+            if (this.files && this.files[0]) {
+                if (!this.files[0].name.match(/.(png)$/i)) {
                     alert('not a valid PNG image');
                     return;
                 }
-                readURL(input.files[0]);
+                readURL(this.files[0]);
             }
         }
 
