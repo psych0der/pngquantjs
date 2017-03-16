@@ -8,6 +8,6 @@ Since the process of setting up emscripten is tedious and may pollute the global
 docker pull psych0der/emscripten` command. I would recommend using docker image since it greatly simplifies working with emscripten without thinking about any installation issue.
 
 ### Demo
-
+[https://psych0der.github.io/pngquantjs/](https://psych0der.github.io/pngquantjs/)
 ### Licence
 MIT
