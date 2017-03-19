@@ -10,9 +10,6 @@
     /* Using query selector */
     window.$ = document.querySelector.bind(document);
 
-    var inputImageData = null, // reference to input image data
-        outputImagedata = null;
-
     /* Utility to convert file size in readable format */
     function readableFileSize(bytes, si) {;
         var thresh = si
@@ -50,6 +47,7 @@
         return bytes.toFixed(1) + ' ' + units[u];
     }
 
+
     /* Utility to convert data url to blob */
     function dataURLtoUint8(dataurl) {
         var arr = dataurl.split(','),
@@ -63,18 +61,38 @@
         return u8arr;
     }
 
-    /* event handler for image picker */
-    var readURL = function(file) {
-        var dataUrlReader = new FileReader();
-        dataUrlReader.onload = function(e) {
-            $('#input-img').setAttribute('src', e.target.result);
-            $('#input-file-stats').innerHTML = 'Input image [' + readableFileSize(file.size) + ']';
-            $('#terminal').style.display = 'block';
-            $('#file-dropper').style.display = 'none';
-            inputImageData = dataURLtoUint8(e.target.result);
-        }
-        dataUrlReader.readAsDataURL(file);
 
+    /* event handler for image picker and drop */
+    var displayFile = function(file) {
+        $('#input-img').src = URL.createObjectURL(file);
+        $('#input-img').onload = function(e) { URL.revokeObjectURL(file) };
+        $('#input-file-stats').innerHTML = 'Input image [' + readableFileSize(file.size) + ']';
+        $('#terminal').style.display = 'block';
+        $('#file-dropper').style.display = 'none';
+
+        /* run the compress function on click */
+        $('#compress').onclick = function(e) {
+            e.preventDefault();
+            $('#console').style.display = 'block';
+            $('.compress-text').style.display = 'block';
+            $('#control-panel').style.display = 'none';
+            var reader = new FileReader();
+            reader.readAsDataURL(file)
+            reader.onload = function(e){
+
+                worker.postMessage({
+                    type: "command",
+                    arguments: {
+                        'quality': getRangeSliderValue(),
+                        'speed': '' + getSliderValue()
+                    },
+                    file: {
+                        "name": "input.png",
+                        "data": dataURLtoUint8(e.target.result)
+                    }
+                });
+            };
+        }
     }
 
     function getRangeSliderValue() {
@@ -101,22 +119,11 @@
         return slider.value;
     }
 
-    /* Run the compression function */
-    function runIt(args) {
-        worker.postMessage({
-            type: "command",
-            arguments: args,
-            file: {
-                "name": "input.png",
-                "data": inputImageData
-            }
-        });
-    }
 
     /* Prepare downoad link form blob */
     function getDownloadLink(fileData, fileName) {
         if (fileName.match(/\.jpeg|\.gif|\.jpg|\.png/)) {
-            var blob = new Blob([fileData]);
+            var blob = new Blob([fileData], {type: 'image/png'});
             var src = window.URL.createObjectURL(blob);
             return src;
         }
@@ -163,7 +170,7 @@
                     alert('not a valid PNG image');
                     return;
                 }
-                readURL(this.files[0]);
+                displayFile(this.files[0]);
             }
         }
 
@@ -180,7 +187,7 @@
             e.preventDefault();
 
             var file = e.dataTransfer.files[0];
-            readURL(file);
+            displayFile(file);
         };
 
         /* init range slider */
@@ -204,17 +211,6 @@
         $('#speed-control').oninput = getSliderValue;
         $('#speed-control').oninput();
 
-        /* run the compress function */
-        $('#compress').onclick = function(e) {
-            e.preventDefault();
-            $('#console').style.display = 'block';
-            $('.compress-text').style.display = 'block';
-            $('#control-panel').style.display = 'none';
-            runIt({
-                'quality': getRangeSliderValue(),
-                'speed': '' + getSliderValue()
-            });
-        }
 
         $('#reset').onclick = function(e) {
             e.preventDefault();
@@ -222,7 +218,7 @@
             $('#input-file-stats').innerHTML = '';
             $('#terminal').style.display = 'none';
             $('#file-dropper').style.display = 'block';
-            inputImageData = null;
+            $('#compress').onclick = null;
         }
 
         /* refresh entire state */
@@ -239,7 +235,6 @@
           $('#file-dropper').style.display = 'block';
           $('.refresh-container').style.display = 'none';
           $('#control-panel').style.display = 'block';
-          inputImageData = null;
 
         }
 
