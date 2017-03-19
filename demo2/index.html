@@ -1,0 +1,127 @@
+<input type="file" id="input">
+<output id="output"></output>
+<style>
+output::before {
+	content: "output:";
+}
+output {
+	display: block;
+	padding: 1em;
+	margin: 1em;
+	outline: 1px solid gray;
+	white-space: pre-wrap;
+	font-family: monospace;
+}
+</style>
+<script src="../demo/js/pngquant.js"></script>
+<script>
+
+console.info("Simple demo, it freezes the main window, so the right way is to use a Worker")
+
+
+// FileReaders promisified
+var [readAsText, readAsArrayBuffer, readAsDataURL] = ['readAsText', 'readAsArrayBuffer', 'readAsDataURL'].map(read => 
+	file => 
+		new Promise(resolve => {
+			var reader = new FileReader();
+			reader[read](file)
+			reader.onload = e => {
+				resolve(e.target.result)
+			}
+		})
+);
+
+// way 1 to get image binary data
+// function dataURLtoUint8(dataurl) {
+// 	var arr = dataurl.split(','),
+// 		mime = arr[0].match(/:(.*?);/)[1],
+// 		bstr = atob(arr[1]),
+// 		n = bstr.length,
+// 		u8arr = new Uint8Array(n);
+// 	while (n--) {
+// 		u8arr[n] = bstr.charCodeAt(n);
+// 	}
+// 	return u8arr;
+// }
+// function getImageData(file){
+// 	return readAsDataURL(file).then(dataURLtoUint8);
+// }
+
+// way 2 more simple
+function getImageData2(file) {
+	return readAsArrayBuffer(file)
+	.then(buffer => new Uint8Array(buffer));
+}
+
+// function getImagePixelData(file) {
+// 	return createImageBitmap(file)
+// 	.then(bmp => {
+// 		var canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
+// 		canvas.width = bmp.width;
+// 		canvas.height = bmp.height;
+// 		ctx.drawImage(bmp, 0, 0, bmp.width, bmp.height);
+// 		return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+// 	})
+// }
+
+
+input.onchange = e => {
+	var file = input.files[0];
+
+	getImageData2(file)
+	.then(data => {	
+		var now = performance.now();
+
+		var result = pngquant(data, {}, console.info);
+		
+		var after = performance.now() - now;
+
+		console.log(result);
+
+		var blob = new Blob([result.data], {type: 'image/png'});
+
+		output.innerHTML = `
+			file:           ${file.name}
+			size:           ${file.size} bytes
+			optimized size: ${blob.size} bytes  ${((1 - blob.size/file.size)*100).toFixed()}% less
+			duration:       ${after.toFixed(2)} ms 
+		`;
+		
+		var img = new Image();
+		img.src = URL.createObjectURL(blob);
+		img.onload = e => URL.revokeObjectURL(blob);
+		output.appendChild(img);
+	});
+}
+
+
+
+// with worker:
+
+// worker.postMessage({
+// 	type: "command",
+// 	file: {
+// 		"name": "input.png",
+// 		"data": imgData
+// 	}
+// });
+
+// var worker = new Worker("../demo/js/worker.js");
+// worker.onmessage = function(event) {
+// 	var message = event.data;
+// 	if (message.type == "ready") {
+// 		console.log('worker ready')
+// 		input.disabled = false;
+// 	} else if (message.type == "stdout") {
+// 			console.log(message.data);
+// 	} else if (message.type == "start") {
+// 			console.log('start');
+// 	} else if (message.type == "done") {
+// 		message.data.forEach(function(file) {
+// 			console.log(file, file.data)
+// 		});
+// 	}
+// };
+
+
+</script>
