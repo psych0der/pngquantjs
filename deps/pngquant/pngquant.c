@@ -1,45 +1,13 @@
 /* pngquant.c - quantize the colors in an alphamap down to a specified number
 **
-** Copyright (C) 1989, 1991 by Jef Poskanzer.
-**
-** Permission to use, copy, modify, and distribute this software and its
-** documentation for any purpose and without fee is hereby granted, provided
-** that the above copyright notice appear in all copies and that both that
-** copyright notice and this permission notice appear in supporting
-** documentation.  This software is provided "as is" without express or
-** implied warranty.
-**
-** - - - -
-**
+** © 2009-2018 by Kornel Lesiński.
+** © 1989, 1991 by Jef Poskanzer.
 ** © 1997-2002 by Greg Roelofs; based on an idea by Stefan Schneider.
-** © 2009-2015 by Kornel Lesiński.
 **
-** All rights reserved.
-**
-** Redistribution and use in source and binary forms, with or without modification,
-** are permitted provided that the following conditions are met:
-**
-** 1. Redistributions of source code must retain the above copyright notice,
-**    this list of conditions and the following disclaimer.
-**
-** 2. Redistributions in binary form must reproduce the above copyright notice,
-**    this list of conditions and the following disclaimer in the documentation
-**    and/or other materials provided with the distribution.
-**
-** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-** AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-** IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-** DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-** FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-** DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-** SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-** CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-** OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-**
+** See COPYRIGHT file for license.
 */
 
-#define PNGQUANT_VERSION LIQ_VERSION_STRING " (March 2017)"
+#define PNGQUANT_VERSION LIQ_VERSION_STRING " (January 2018)"
 
 #define PNGQUANT_USAGE "\
 usage:  pngquant [options] [ncolors] -- pngfile [pngfile ...]\n\
@@ -71,16 +39,13 @@ use --force to overwrite. See man page for full list of options.\n"
 #include <string.h>
 #include <stdarg.h>
 #include <stdbool.h>
-#include <getopt.h>
-#include <unistd.h>
 #include <math.h>
 
-extern char *optarg;
-extern int optind, opterr;
-
-#if defined(WIN32) || defined(__WIN32__)
+#if defined(_WIN32) || defined(WIN32) || defined(__WIN32__)
 #  include <fcntl.h>    /* O_BINARY */
 #  include <io.h>   /* setmode() */
+#else
+#  include <unistd.h>
 #endif
 
 #ifdef _OPENMP
@@ -91,19 +56,8 @@ extern int optind, opterr;
 #endif
 
 #include "rwpng.h"  /* typedefs, common macros, public prototypes */
-#include "lib/libimagequant.h"
-
-struct pngquant_options {
-    liq_attr *liq;
-    liq_image *fixed_palette_image;
-    liq_log_callback_function *log_callback;
-    void *log_callback_user_info;
-    float floyd;
-    bool using_stdin, using_stdout, force, fast_compression, ie_mode,
-        min_quality_limit, skip_if_larger,
-        strip,
-        verbose;
-};
+#include "libimagequant.h" /* if it fails here, run: git submodule update; ./configure; or add -Ilib to compiler flags */
+#include "pngquant_opts.h"
 
 static pngquant_error prepare_output_image(liq_result *result, liq_image *input_image, rwpng_color_transform tag, png8_image *output_image);
 static void set_palette(liq_result *result, png8_image *output_image);
@@ -120,12 +74,19 @@ static void verbose_printf(struct pngquant_options *context, const char *fmt, ..
         int required_space = vsnprintf(NULL, 0, fmt, va)+1; // +\0
         va_end(va);
 
+#if defined(_MSC_VER)
+        char *buf = malloc(required_space);
+#else
         char buf[required_space];
+#endif
         va_start(va, fmt);
         vsnprintf(buf, required_space, fmt, va);
         va_end(va);
 
         context->log_callback(context->liq, buf, context->log_callback_user_info);
+#if defined(_MSC_VER)
+        free(buf);
+#endif
     }
 }
 
@@ -224,268 +185,144 @@ static bool parse_quality(const char *quality, liq_attr *options, bool *min_qual
     return LIQ_OK == liq_set_quality(options, limit, target);
 }
 
-static const struct {const char *old; const char *newopt;} obsolete_options[] = {
-    {"-fs","--floyd=1"},
-    {"-nofs", "--ordered"},
-    {"-floyd", "--floyd=1"},
-    {"-nofloyd", "--ordered"},
-    {"-ordered", "--ordered"},
-    {"-force", "--force"},
-    {"-noforce", "--no-force"},
-    {"-verbose", "--verbose"},
-    {"-quiet", "--quiet"},
-    {"-noverbose", "--quiet"},
-    {"-noquiet", "--verbose"},
-    {"-help", "--help"},
-    {"-version", "--version"},
-    {"-ext", "--ext"},
-    {"-speed", "--speed"},
-};
+pngquant_error pngquant_main(struct pngquant_options *options);
+static pngquant_error pngquant_file_internal(const char *filename, const char *outname, struct pngquant_options *options);
 
-static void fix_obsolete_options(const unsigned int argc, char *argv[])
-{
-    for(unsigned int argn=1; argn < argc; argn++) {
-        if ('-' != argv[argn][0]) continue;
-
-        if ('-' == argv[argn][1]) break; // stop on first --option or --
-
-        for(unsigned int i=0; i < sizeof(obsolete_options)/sizeof(obsolete_options[0]); i++) {
-            if (0 == strcmp(obsolete_options[i].old, argv[argn])) {
-                fprintf(stderr, "  warning: option '%s' has been replaced with '%s'.\n", obsolete_options[i].old, obsolete_options[i].newopt);
-                argv[argn] = (char*)obsolete_options[i].newopt;
-            }
-        }
-    }
-}
-
-enum {arg_floyd=1, arg_ordered, arg_ext, arg_no_force, arg_iebug,
-    arg_transbug, arg_map, arg_posterize, arg_skip_larger, arg_strip};
-
-static const struct option long_options[] = {
-    {"verbose", no_argument, NULL, 'v'},
-    {"quiet", no_argument, NULL, 'q'},
-    {"force", no_argument, NULL, 'f'},
-    {"no-force", no_argument, NULL, arg_no_force},
-    {"floyd", optional_argument, NULL, arg_floyd},
-    {"ordered", no_argument, NULL, arg_ordered},
-    {"nofs", no_argument, NULL, arg_ordered},
-    {"iebug", no_argument, NULL, arg_iebug},
-    {"transbug", no_argument, NULL, arg_transbug},
-    {"ext", required_argument, NULL, arg_ext},
-    {"skip-if-larger", no_argument, NULL, arg_skip_larger},
-    {"output", required_argument, NULL, 'o'},
-    {"speed", required_argument, NULL, 's'},
-    {"quality", required_argument, NULL, 'Q'},
-    {"posterize", required_argument, NULL, arg_posterize},
-    {"strip", no_argument, NULL, arg_strip},
-    {"map", required_argument, NULL, arg_map},
-    {"version", no_argument, NULL, 'V'},
-    {"help", no_argument, NULL, 'h'},
-    {NULL, 0, NULL, 0},
-};
-
-pngquant_error pngquant_file(const char *filename, const char *outname, struct pngquant_options *options);
-
-
+#ifndef PNGQUANT_NO_MAIN
 int main(int argc, char *argv[])
 {
     struct pngquant_options options = {
         .floyd = 1.f, // floyd-steinberg dithering
         .strip = false,
     };
-    options.liq = liq_attr_create();
 
-    if (!options.liq) {
+    pngquant_error retval = pngquant_parse_options(argc, argv, &options);
+    if (retval != SUCCESS) {
+        return retval;
+    }
+
+    return pngquant_main(&options);
+}
+#endif
+
+pngquant_error pngquant_main(struct pngquant_options *options)
+{
+    if (options->print_version) {
+        puts(PNGQUANT_VERSION);
+        return SUCCESS;
+    }
+
+    if (options->missing_arguments) {
+        print_full_version(stderr);
+        print_usage(stderr);
+        return MISSING_ARGUMENT;
+    }
+
+    if (options->print_help) {
+        print_full_version(stdout);
+        print_usage(stdout);
+        return SUCCESS;
+    }
+
+    options->liq = liq_attr_create();
+
+    if (!options->liq) {
         fputs("SSE-capable CPU is required for this build.\n", stderr);
         return WRONG_ARCHITECTURE;
     }
 
-    unsigned int error_count=0, skipped_count=0, file_count=0;
-    pngquant_error latest_error=SUCCESS;
-    const char *newext = NULL, *output_file_path = NULL;
+    if (options->verbose) {
+        liq_set_log_callback(options->liq, log_callback, NULL);
+        options->log_callback = log_callback;
+    }
 
-    fix_obsolete_options(argc, argv);
+    if (options->quality && !parse_quality(options->quality, options->liq, &options->min_quality_limit)) {
+        fputs("Quality should be in format min-max where min and max are numbers in range 0-100.\n", stderr);
+        return INVALID_ARGUMENT;
+    }
 
-    int opt;
-    do {
-        opt = getopt_long(argc, argv, "Vvqfhs:Q:o:", long_options, NULL);
-        switch (opt) {
-            case 'v':
-                options.verbose = true;
-                break;
-            case 'q':
-                options.verbose = false;
-                break;
+    if (options->iebug) {
+        // opacities above 238 will be rounded up to 255, because IE6 truncates <255 to 0.
+        liq_set_min_opacity(options->liq, 238);
+        fputs("  warning: the workaround for IE6 is deprecated\n", stderr);
+    }
 
-            case arg_floyd:
-                options.floyd = optarg ? atof(optarg) : 1.f;
-                if (options.floyd < 0 || options.floyd > 1.f) {
-                    fputs("--floyd argument must be in 0..1 range\n", stderr);
-                    return INVALID_ARGUMENT;
-                }
-                break;
-            case arg_ordered: options.floyd = 0; break;
+    if (options->last_index_transparent) {
+        liq_set_last_index_transparent(options->liq, true);
+    }
 
-            case 'f': options.force = true; break;
-            case arg_no_force: options.force = false; break;
-
-            case arg_ext: newext = optarg; break;
-            case 'o':
-                if (output_file_path) {
-                    fputs("--output option can be used only once\n", stderr);
-                    return INVALID_ARGUMENT;
-                }
-                if (strcmp(optarg, "-") == 0) {
-                    options.using_stdout = true;
-                    break;
-                }
-                output_file_path = optarg; break;
-
-            case arg_iebug:
-                // opacities above 238 will be rounded up to 255, because IE6 truncates <255 to 0.
-                liq_set_min_opacity(options.liq, 238);
-                fputs("  warning: the workaround for IE6 is deprecated\n", stderr);
-                break;
-
-            case arg_transbug:
-                liq_set_last_index_transparent(options.liq, true);
-                break;
-
-            case arg_skip_larger:
-                options.skip_if_larger = true;
-                break;
-
-            case 's':
-                {
-                    int speed = atoi(optarg);
-                    if (speed >= 10) {
-                        options.fast_compression = true;
-                    }
-                    if (speed == 11) {
-                        options.floyd = 0;
-                        speed = 10;
-                    }
-                    if (LIQ_OK != liq_set_speed(options.liq, speed)) {
-                        fputs("Speed should be between 1 (slow) and 11 (fast).\n", stderr);
-                        return INVALID_ARGUMENT;
-                    }
-                }
-                break;
-
-            case 'Q':
-                if (!parse_quality(optarg, options.liq, &options.min_quality_limit)) {
-                    fputs("Quality should be in format min-max where min and max are numbers in range 0-100.\n", stderr);
-                    return INVALID_ARGUMENT;
-                }
-                break;
-
-            case arg_posterize:
-                if (LIQ_OK != liq_set_min_posterization(options.liq, atoi(optarg))) {
-                    fputs("Posterization should be number of bits in range 0-4.\n", stderr);
-                    return INVALID_ARGUMENT;
-                }
-                break;
-
-            case arg_strip:
-                options.strip = true;
-                break;
-
-            case arg_map:
-                {
-                    png24_image tmp = {};
-                    if (SUCCESS != read_image(options.liq, optarg, false, &tmp, &options.fixed_palette_image, true, true, false)) {
-                        fprintf(stderr, "  error: unable to load %s", optarg);
-                        return INVALID_ARGUMENT;
-                    }
-                    liq_result *tmp_quantize = liq_quantize_image(options.liq, options.fixed_palette_image);
-                    const liq_palette *pal = liq_get_palette(tmp_quantize);
-                    if (!pal) {
-                        fprintf(stderr, "  error: unable to read colors from %s", optarg);
-                        return INVALID_ARGUMENT;
-                    }
-                    for(unsigned int i=0; i < pal->count; i++) {
-                        liq_image_add_fixed_color(options.fixed_palette_image, pal->entries[i]);
-                    }
-                    liq_result_destroy(tmp_quantize);
-                }
-                break;
-
-            case 'h':
-                print_full_version(stdout);
-                print_usage(stdout);
-                return SUCCESS;
-
-            case 'V':
-                puts(PNGQUANT_VERSION);
-                return SUCCESS;
-
-            case -1: break;
-
-            default:
-                return INVALID_ARGUMENT;
+    if (options->speed >= 10) {
+        options->fast_compression = true;
+        if (options->speed == 11) {
+            options->floyd = 0;
+            options->speed = 10;
         }
-    } while (opt != -1);
+    }
 
-    int argn = optind;
+    if (options->speed && LIQ_OK != liq_set_speed(options->liq, options->speed)) {
+        fputs("Speed should be between 1 (slow) and 11 (fast).\n", stderr);
+        return INVALID_ARGUMENT;
+    }
+    if (options->colors && LIQ_OK != liq_set_max_colors(options->liq, options->colors)) {
+        fputs("Number of colors must be between 2 and 256.\n", stderr);
+        return INVALID_ARGUMENT;
+    }
 
-    if (argn >= argc) {
-        if (argn > 1) {
-            fputs("No input files specified.\n", stderr);
-        } else {
+    if (options->posterize && LIQ_OK != liq_set_min_posterization(options->liq, options->posterize)) {
+        fputs("Posterization should be number of bits in range 0-4.\n", stderr);
+        return INVALID_ARGUMENT;
+    }
+
+    if (options->extension && options->output_file_path) {
+        fputs("--ext and --output options can't be used at the same time\n", stderr);
+        return INVALID_ARGUMENT;
+    }
+
+    // new filename extension depends on options used. Typically basename-fs8.png
+    if (options->extension == NULL) {
+        options->extension = options->floyd > 0 ? "-fs8.png" : "-or8.png";
+    }
+
+    if (options->output_file_path && options->num_files != 1) {
+        fputs("  error: Only one input file is allowed when --output is used. This error also happens when filenames with spaces are not in quotes.\n", stderr);
+        return INVALID_ARGUMENT;
+    }
+
+    if (options->using_stdout && !options->using_stdin && options->num_files != 1) {
+        fputs("  error: Only one input file is allowed when using the special output path \"-\" to write to stdout. This error also happens when filenames with spaces are not in quotes.\n", stderr);
+        return INVALID_ARGUMENT;
+    }
+
+    if (options->map_file) {
+        png24_image tmp = {.width=0};
+        if (SUCCESS != read_image(options->liq, options->map_file, false, &tmp, &options->fixed_palette_image, true, true, false)) {
+            fprintf(stderr, "  error: unable to load %s", options->map_file);
+            return INVALID_ARGUMENT;
+        }
+        liq_result *tmp_quantize = liq_quantize_image(options->liq, options->fixed_palette_image);
+        const liq_palette *pal = liq_get_palette(tmp_quantize);
+        if (!pal) {
+            fprintf(stderr, "  error: unable to read colors from %s", options->map_file);
+            return INVALID_ARGUMENT;
+        }
+        for(unsigned int i=0; i < pal->count; i++) {
+            liq_image_add_fixed_color(options->fixed_palette_image, pal->entries[i]);
+        }
+        liq_result_destroy(tmp_quantize);
+    }
+
+    if (!options->num_files && !options->using_stdin) {
+        fputs("No input files specified.\n", stderr);
+        if (options->verbose) {
             print_full_version(stderr);
         }
         print_usage(stderr);
         return MISSING_ARGUMENT;
     }
 
-    if (options.verbose) {
-        liq_set_log_callback(options.liq, log_callback, NULL);
-        options.log_callback = log_callback;
-    }
-
-    char *colors_end;
-    unsigned long colors = strtoul(argv[argn], &colors_end, 10);
-    if (colors_end != argv[argn] && '\0' == colors_end[0]) {
-        if (LIQ_OK != liq_set_max_colors(options.liq, colors)) {
-            fputs("Number of colors must be between 2 and 256.\n", stderr);
-            return INVALID_ARGUMENT;
-        }
-        argn++;
-    }
-
-    if (newext && output_file_path) {
-        fputs("--ext and --output options can't be used at the same time\n", stderr);
-        return INVALID_ARGUMENT;
-    }
-
-    // new filename extension depends on options used. Typically basename-fs8.png
-    if (newext == NULL) {
-        newext = options.floyd > 0 ? "-ie-fs8.png" : "-ie-or8.png";
-        if (!options.ie_mode) {
-            newext += 3;    /* skip "-ie" */
-        }
-    }
-
-    if (argn == argc || (argn == argc-1 && 0==strcmp(argv[argn],"-"))) {
-        options.using_stdin = true;
-        options.using_stdout = !output_file_path;
-        argn = argc-1;
-    }
-
-    const int num_files = argc-argn;
-
-    if (output_file_path && num_files != 1) {
-        fputs("Only one input file is allowed when --output is used\n", stderr);
-        return INVALID_ARGUMENT;
-    }
-    if (options.using_stdout && !options.using_stdin && num_files != 1) {
-        fputs("Only one input file is allowed when using the special output path \"-\" to write to stdout\n", stderr);
-        return INVALID_ARGUMENT;
-    }
-
 #ifdef _OPENMP
     // if there's a lot of files, coarse parallelism can be used
-    if (num_files > 2*omp_get_max_threads()) {
+    if (options->num_files > 2*omp_get_max_threads()) {
         omp_set_nested(0);
         omp_set_dynamic(1);
     } else {
@@ -493,17 +330,20 @@ int main(int argc, char *argv[])
     }
 #endif
 
+    unsigned int error_count=0, skipped_count=0, file_count=0;
+    pngquant_error latest_error=SUCCESS;
+
     #pragma omp parallel for \
         schedule(static, 1) reduction(+:skipped_count) reduction(+:error_count) reduction(+:file_count) shared(latest_error)
-    for(int i=0; i < num_files; i++) {
-        struct pngquant_options opts = options;
-        opts.liq = liq_attr_copy(options.liq);
+    for(int i=0; i < options->num_files; i++) {
+        const char *filename = options->using_stdin ? "stdin" : options->files[i];
+        struct pngquant_options opts = *options;
+        opts.liq = liq_attr_copy(options->liq);
 
-        const char *filename = opts.using_stdin ? "stdin" : argv[argn+i];
 
         #ifdef _OPENMP
-        struct buffered_log buf = {};
-        if (opts.log_callback && omp_get_num_threads() > 1 && num_files > 1) {
+        struct buffered_log buf = {0};
+        if (opts.log_callback && omp_get_num_threads() > 1 && opts.num_files > 1) {
             liq_set_log_callback(opts.liq, log_callback_buferred, &buf);
             liq_set_log_flush_callback(opts.liq, log_callback_buferred_flush, &buf);
             opts.log_callback = log_callback_buferred;
@@ -514,11 +354,11 @@ int main(int argc, char *argv[])
 
         pngquant_error retval = SUCCESS;
 
-        const char *outname = output_file_path;
+        const char *outname = opts.output_file_path;
         char *outname_free = NULL;
         if (!opts.using_stdout) {
             if (!outname) {
-                outname = outname_free = add_filename_extension(filename, newext);
+                outname = outname_free = add_filename_extension(filename, opts.extension);
             }
             if (!opts.force && file_exists(outname)) {
                 fprintf(stderr, "  error: '%s' exists; not overwriting\n", outname);
@@ -527,7 +367,7 @@ int main(int argc, char *argv[])
         }
 
         if (SUCCESS == retval) {
-            retval = pngquant_file(filename, outname, &opts);
+            retval = pngquant_file_internal(filename, outname, &opts);
         }
 
         free(outname_free);
@@ -549,39 +389,40 @@ int main(int argc, char *argv[])
     }
 
     if (error_count) {
-        verbose_printf(&options, "There were errors quantizing %d file%s out of a total of %d file%s.",
+        verbose_printf(options, "There were errors quantizing %d file%s out of a total of %d file%s.",
                        error_count, (error_count == 1)? "" : "s", file_count, (file_count == 1)? "" : "s");
     }
     if (skipped_count) {
-        verbose_printf(&options, "Skipped %d file%s out of a total of %d file%s.",
+        verbose_printf(options, "Skipped %d file%s out of a total of %d file%s.",
                        skipped_count, (skipped_count == 1)? "" : "s", file_count, (file_count == 1)? "" : "s");
     }
     if (!skipped_count && !error_count) {
-        verbose_printf(&options, "Quantized %d image%s.",
+        verbose_printf(options, "Quantized %d image%s.",
                        file_count, (file_count == 1)? "" : "s");
     }
 
-    if (options.fixed_palette_image) liq_image_destroy(options.fixed_palette_image);
-    liq_attr_destroy(options.liq);
+    if (options->fixed_palette_image) liq_image_destroy(options->fixed_palette_image);
+    liq_attr_destroy(options->liq);
 
     return latest_error;
 }
 
-pngquant_error pngquant_file(const char *filename, const char *outname, struct pngquant_options *options)
+/// Don't hack this. Instead use https://github.com/ImageOptim/libimagequant/blob/f54d2f1a3e1cf728e17326f4db0d45811c63f063/example.c
+static pngquant_error pngquant_file_internal(const char *filename, const char *outname, struct pngquant_options *options)
 {
     pngquant_error retval = SUCCESS;
 
     verbose_printf(options, "%s:", filename);
 
     liq_image *input_image = NULL;
-    png24_image input_image_rwpng = {};
+    png24_image input_image_rwpng = {.width=0};
     bool keep_input_pixels = options->skip_if_larger || (options->using_stdout && options->min_quality_limit); // original may need to be output to stdout
     if (SUCCESS == retval) {
         retval = read_image(options->liq, filename, options->using_stdin, &input_image_rwpng, &input_image, keep_input_pixels, options->strip, options->verbose);
     }
 
     int quality_percent = 90; // quality on 0-100 scale, updated upon successful remap
-    png8_image output_image = {};
+    png8_image output_image = {.width=0};
     if (SUCCESS == retval) {
         verbose_printf(options, "  read %luKB file", (input_image_rwpng.file_size+1023UL)/1024UL);
 
@@ -728,7 +569,7 @@ static char *temp_filename(const char *basename) {
 
 static void set_binary_mode(FILE *fp)
 {
-#if defined(WIN32) || defined(__WIN32__)
+#if defined(_WIN32) || defined(WIN32) || defined(__WIN32__)
     setmode(fp == stdout ? 1 : 0, O_BINARY);
 #endif
 }
@@ -744,7 +585,7 @@ static const char *filename_part(const char *path)
 }
 
 static bool replace_file(const char *from, const char *to, const bool force) {
-#if defined(WIN32) || defined(__WIN32__)
+#if defined(_WIN32) || defined(WIN32) || defined(__WIN32__)
     if (force) {
         // On Windows rename doesn't replace
         unlink(to);

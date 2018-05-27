@@ -1,20 +1,9 @@
 /*
-© 2011-2015 by Kornel Lesiński.
-
-This file is part of libimagequant.
-
-libimagequant is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-libimagequant is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with libimagequant. If not, see <http://www.gnu.org/licenses/>.
+** © 2009-2015 by Kornel Lesiński.
+** © 1989, 1991 by Jef Poskanzer.
+** © 1997, 2000, 2002 by Greg Roelofs; based on an idea by Stefan Schneider.
+**
+** See COPYRIGHT file for license.
 */
 
 #include "libimagequant.h"
@@ -45,7 +34,7 @@ struct nearest_map {
     vp_node *root;
     const colormap_item *palette;
     float nearest_other_color_dist[256];
-    mempool mempool;
+    mempoolptr mempool;
 };
 
 static void vp_search_node(const vp_node *node, const f_pixel *const needle, vp_search_tmp *const best_candidate);
@@ -56,7 +45,7 @@ static int vp_compare_distance(const void *ap, const void *bp) {
     return a > b ? 1 : -1;
 }
 
-static void vp_sort_indexes_by_distance(const f_pixel vantage_point, vp_sort_tmp *indexes, int num_indexes, const colormap_item items[]) {
+static void vp_sort_indexes_by_distance(const f_pixel vantage_point, vp_sort_tmp indexes[], int num_indexes, const colormap_item items[]) {
     for(int i=0; i < num_indexes; i++) {
         indexes[i].distance_squared = colordifference(vantage_point, items[indexes[i].idx].acolor);
     }
@@ -66,7 +55,7 @@ static void vp_sort_indexes_by_distance(const f_pixel vantage_point, vp_sort_tmp
 /*
  * Usually it should pick farthest point, but picking most popular point seems to make search quicker anyway
  */
-static int vp_find_best_vantage_point_index(vp_sort_tmp *indexes, int num_indexes, const colormap_item items[]) {
+static int vp_find_best_vantage_point_index(vp_sort_tmp indexes[], int num_indexes, const colormap_item items[]) {
     int best = 0;
     float best_popularity = items[indexes[0].idx].popularity;
     for(int i = 1; i < num_indexes; i++) {
@@ -78,7 +67,7 @@ static int vp_find_best_vantage_point_index(vp_sort_tmp *indexes, int num_indexe
     return best;
 }
 
-static vp_node *vp_create_node(mempool *m, vp_sort_tmp *indexes, int num_indexes, const colormap_item items[]) {
+static vp_node *vp_create_node(mempoolptr *m, vp_sort_tmp indexes[], int num_indexes, const colormap_item items[]) {
     if (num_indexes <= 0) {
         return NULL;
     }
@@ -118,10 +107,10 @@ static vp_node *vp_create_node(mempool *m, vp_sort_tmp *indexes, int num_indexes
 }
 
 LIQ_PRIVATE struct nearest_map *nearest_init(const colormap *map) {
-    mempool m = NULL;
+    mempoolptr m = NULL;
     struct nearest_map *handle = mempool_create(&m, sizeof(handle[0]), sizeof(handle[0]) + sizeof(vp_node)*map->colors+16, map->malloc, map->free);
 
-    vp_sort_tmp indexes[map->colors];
+    LIQ_ARRAY(vp_sort_tmp, indexes, map->colors);
 
     for(unsigned int i=0; i < map->colors; i++) {
         indexes[i].idx = i;

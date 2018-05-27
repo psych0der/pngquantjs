@@ -3,6 +3,7 @@ config.mk
 *.o
 *.a
 *.so.0
+*.so
 *.bz2
 *.dylib
 *.dylib.0
@@ -10,3 +11,16 @@ config.mk
 *.dSYM
 org/pngquant/*.class
 org/pngquant/*.h
+target/
+msvc-dist/org/
+msvc-dist/*.md
+msvc-dist/Makefile*
+msvc-dist/*.cs
+msvc-dist/*.xml
+msvc-dist/CHANGELOG
+msvc-dist/COPYRIGHT
+msvc-dist/configure
+msvc-dist/.gitignore
+quantized_example.png
+example
+lodepng.?

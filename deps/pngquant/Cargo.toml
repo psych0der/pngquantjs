@@ -1,0 +1,59 @@
+[package]
+authors = ["Kornel Lesiński <kornel@pngquant.org>"]
+build = "rust/build.rs"
+categories = ["multimedia::images"]
+description = "Convert 24/32-bit images to 8-bit palette with alpha channel.\nBindings for libimagequant that powers pngquant lossy PNG compressor.\n\nDual-licensed like pngquant. See https://pngquant.org for details."
+documentation= "https://github.com/kornelski/pngquant#readme"
+homepage = "https://pngquant.org"
+include = ["/rwpng*", "/pngquant.c", "/rust/*", "/COPYRIGHT", "/Cargo.toml", "/README.md"]
+keywords = ["quantization", "palette", "image", "pngquant", "compression"]
+license = "GPL-3.0+"
+name = "pngquant"
+readme = "README.md"
+repository = "https://github.com/kornelski/pngquant.git"
+version = "2.11.11"
+
+[[bin]]
+name = "pngquant"
+path = "rust/bin.rs"
+
+[build-dependencies]
+cc = "1.0.3"
+dunce = "0.1.0"
+
+[dependencies]
+getopts = "0.2.15"
+libc = "0.2.33"
+libpng-sys = "0.1.4"
+wild = "0.1.0"
+
+[dependencies.cocoa_image]
+optional = true
+version = "0.1.1"
+
+[dependencies.imagequant-sys]
+path = "lib"
+version = "2.11.11"
+
+[dependencies.lcms2-sys]
+optional = true
+version = "2.4.4"
+
+[dependencies.openmp-sys]
+optional = true
+version = "0.1.2"
+
+[features]
+cocoa = ["cocoa_image"]
+default = ["sse", "lcms2"]
+lcms2 = ["lcms2-sys"]
+lcms2-static = ["lcms2", "lcms2-sys/static"]
+openmp = ["openmp-sys", "imagequant-sys/openmp"]
+openmp-static = ["openmp", "openmp-sys/static", "imagequant-sys/openmp-static"]
+png-static = ["libpng-sys/static"]
+static = ["lcms2-static", "png-static", "openmp-static"]
+sse = ["imagequant-sys/sse"]
+alloc_system = []
+
+[profile.release]
+lto = true

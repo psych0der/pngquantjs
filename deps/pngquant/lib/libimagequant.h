@@ -13,8 +13,8 @@
 #define LIQ_EXPORT extern
 #endif
 
-#define LIQ_VERSION 20900
-#define LIQ_VERSION_STRING "2.9.0"
+#define LIQ_VERSION 21111
+#define LIQ_VERSION_STRING "2.11.11"
 
 #ifndef LIQ_PRIVATE
 #if defined(__GNUC__) || defined (__llvm__)
@@ -60,7 +60,11 @@ typedef enum liq_error {
     LIQ_UNSUPPORTED,
 } liq_error;
 
-enum liq_ownership {LIQ_OWN_ROWS=4, LIQ_OWN_PIXELS=8};
+enum liq_ownership {
+    LIQ_OWN_ROWS=4,
+    LIQ_OWN_PIXELS=8,
+    LIQ_COPY_PIXELS=16,
+};
 
 typedef struct liq_histogram_entry {
     liq_color color;
@@ -107,6 +111,8 @@ typedef void liq_image_get_rgba_row_callback(liq_color row_out[], int row, int w
 LIQ_EXPORT LIQ_USERESULT liq_image *liq_image_create_custom(const liq_attr *attr, liq_image_get_rgba_row_callback *row_callback, void* user_info, int width, int height, double gamma);
 
 LIQ_EXPORT liq_error liq_image_set_memory_ownership(liq_image *image, int ownership_flags) LIQ_NONNULL;
+LIQ_EXPORT liq_error liq_image_set_background(liq_image *img, liq_image *background_image) LIQ_NONNULL;
+LIQ_EXPORT liq_error liq_image_set_importance_map(liq_image *img, unsigned char buffer[], size_t buffer_size, enum liq_ownership memory_handling) LIQ_NONNULL;
 LIQ_EXPORT liq_error liq_image_add_fixed_color(liq_image *img, liq_color color) LIQ_NONNULL;
 LIQ_EXPORT LIQ_USERESULT int liq_image_get_width(const liq_image *img) LIQ_NONNULL;
 LIQ_EXPORT LIQ_USERESULT int liq_image_get_height(const liq_image *img) LIQ_NONNULL;

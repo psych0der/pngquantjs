@@ -2,12 +2,16 @@
 
 (For instructions for Windows see section below.)
 
+### Using GNU/Makefile
+
 To get the code:
 
-    git clone --recursive https://github.com/pornel/pngquant.git
+    git clone --recursive https://github.com/kornelski/pngquant.git
 
 You will need libpng installed with development headers.
 On Linux install `libpng-dev` package. On macOS `brew install libpng`.
+
+There's an optional `./configure` step (see sections below). Run:
 
     make
 
@@ -24,75 +28,65 @@ pngquant uses GNU Makefile. To compile on FreeBSD you will need to use `gmake`.
 Avoid Linux distros that ship with libpng 1.2. It is old and buggy.
 Use libpng 1.6 or later.
 
+### Using Rust/Cargo
+
+If you have Rust, you can also build with `cargo build`.
+
+### Custom static libpng
+
+Extract libpng source code as a *sub*directory of pngquant source directory.
+Build static libpng (`./configure --enable-static && make`), and then
+`./configure && make` pngquant.
+
+When building with Cargo, `export PNG_STATIC=1`.
+
 ## Windows
 
-Compiling on Windows is horrible. Please use pre-built binaries if possible.
+Compiling on Windows is supported only via Rust/Cargo.
 
-Install git (msys-git). Install mingw or mingw64, depending on your OS version.
-Ensure system PATH environment variable to contains `C:\mingw\bin`.
-
-Restart Windows.
+ 1. Install git (msys-git).
+ 2. Install Visual C++ 2015 Build Tools.
+ 3. [Install Rust](https://www.rust-lang.org/install.html)
+ 4. Restart Windows.
 
 Open Git's Bash prompt and run:
 
-    git clone -b msvc --recursive https://github.com/pornel/pngquant.git
+    git clone -b msvc --recursive https://github.com/kornelski/pngquant.git
     cd pngquant
 
-This will create pngquant folder in your user folder.
+This will create pngquant folder in your user folder. And then run:
 
-Download zlib source code 1.2 or later.
-Do not download a DLL-only version — it will not work.
+    cargo build --release
 
-Move the zlib-1.2.tar.gz archive to the pngquant folder and run:
-
-    tar xf zlib*gz
-    mv zlib-<press tab> zlib
-    cd zlib
-    make -f win32/Makefile.gcc
-    cd ..
-
-if `make` doesn't work, try `mingw32-make`. If that doesn't work, fix your PATH.
-
-Download libpng 1.6 or later, extract it as a subfolder of pngquant folder.
-Do not use pre-built libpng — it will not work.
-
-Change current directory to the extracted libpng (ir will be "lpng168" or such)
-
-    cd lpng<press tab>
-    cp ../zlib/*.h ./
-    make -f scripts/makefile.msys ZLIBLIB=../zlib
-    cd ..
-    make
-
-Ignore the compilation errors. Hopefully it'll work anyway. Good luck!
-
+It will create `pngquant.exe` in `target/release` subfolder.
 
 ## Compilation with OpenMP
 
-    ./configure --with-openmp && make
+    cargo build --release --features=openmp # or
+    cargo build --release --features=openmp-static
 
-On macOS you may need to install gcc and add `CC=gcc-6` to `./configure`,
+On macOS you may need to install gcc and run `export CC=gcc-7` first,
 because clang doesn't support OpenMP (yet).
-
 
 ## Compilation without Cocoa image reader
 
-macOS version uses Cocoa to read images. This adds support for color profiles
-and other image formats as input. `./configure --without-cocoa` switches back
-to libpng.
+macOS version can use Cocoa to read images. This adds support for color profiles
+and other image formats as input.
 
+    cargo build --release --features=cocoa
 
 ## Compilation with Little CMS 2
 
-    ./configure --with-lcms2 && make
+Little CMS library is used by default.
 
-Enables support for ICC v2/v4 color profiles when reading images.
-Requires Little CMS library available via `pgk-config` (e.g. install `liblcms2-dev`).
+It's linked dynamically if `pkg-config` is working (e.g. install `liblcms2-dev`).
+Otherwise uses static build as a fallback.
 
+Set `export LCMS2_STATIC=1` to force static linking.
 
-##Compilation of `libimagequant.a` only
+## Compilation of `libimagequant.a` only
 
 If you want to use pngquant's conversion algorithm without loading/saving PNG
-files, then you can run `make` in the `lib/` directory.
-The library doesn't need libpng or zlib.
+files, then you can run `make` or `cargo build` in the `lib/` directory.
 
+The library doesn't need libpng nor zlib.

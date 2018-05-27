@@ -62,6 +62,12 @@
 #  define SSE_ALIGN
 #endif
 
+#ifndef _MSC_VER
+#define LIQ_ARRAY(type, var, count) type var[count]
+#else
+#define LIQ_ARRAY(type, var, count) type* var = (type*)_alloca(sizeof(type)*(count))
+#endif
+
 #if defined(__GNUC__) || defined (__llvm__)
 #define ALWAYS_INLINE __attribute__((always_inline)) inline
 #define NEVER_INLINE __attribute__ ((noinline))
@@ -85,7 +91,7 @@ typedef struct {
     float a, r, g, b;
 } SSE_ALIGN f_pixel;
 
-static const double internal_gamma = 0.5499;
+static const float internal_gamma = 0.5499f;
 
 LIQ_PRIVATE void to_f_set_gamma(float gamma_lut[], const double gamma);
 
@@ -238,7 +244,7 @@ typedef struct colormap {
 
 struct acolorhist_arr_item {
     union rgba_as_int color;
-    float perceptual_weight;
+    unsigned int perceptual_weight;
 };
 
 struct acolorhist_arr_head {
@@ -260,7 +266,7 @@ LIQ_PRIVATE void pam_freeacolorhash(struct acolorhash_table *acht);
 LIQ_PRIVATE struct acolorhash_table *pam_allocacolorhash(unsigned int maxcolors, unsigned int surface, unsigned int ignorebits, void* (*malloc)(size_t), void (*free)(void*));
 LIQ_PRIVATE histogram *pam_acolorhashtoacolorhist(const struct acolorhash_table *acht, const double gamma, void* (*malloc)(size_t), void (*free)(void*));
 LIQ_PRIVATE bool pam_computeacolorhash(struct acolorhash_table *acht, const rgba_pixel *const pixels[], unsigned int cols, unsigned int rows, const unsigned char *importance_map);
-LIQ_PRIVATE bool pam_add_to_hash(struct acolorhash_table *acht, unsigned int hash, float boost, union rgba_as_int px, unsigned int row, unsigned int rows);
+LIQ_PRIVATE bool pam_add_to_hash(struct acolorhash_table *acht, unsigned int hash, unsigned int boost, union rgba_as_int px, unsigned int row, unsigned int rows);
 
 LIQ_PRIVATE void pam_freeacolorhist(histogram *h);
 

@@ -1,16 +1,10 @@
 /* pam.c - pam (portable alpha map) utility library
 **
-** Copyright (C) 1989, 1991 by Jef Poskanzer.
-** Copyright (C) 1997, 2000, 2002 by Greg Roelofs; based on an idea by
-**                                Stefan Schneider.
-** © 2009-2016 by Kornel Lesinski.
+** © 2009-2017 by Kornel Lesiński.
+** © 1989, 1991 by Jef Poskanzer.
+** © 1997, 2000, 2002 by Greg Roelofs; based on an idea by Stefan Schneider.
 **
-** Permission to use, copy, modify, and distribute this software and its
-** documentation for any purpose and without fee is hereby granted, provided
-** that the above copyright notice appear in all copies and that both that
-** copyright notice and this permission notice appear in supporting
-** documentation.  This software is provided "as is" without express or
-** implied warranty.
+** See COPYRIGHT file for license.
 */
 
 #include <stdlib.h>
@@ -33,11 +27,8 @@ LIQ_PRIVATE bool pam_computeacolorhash(struct acolorhash_table *acht, const rgba
     /* Go through the entire image, building a hash table of colors. */
     for(unsigned int row = 0; row < rows; ++row) {
 
-        float boost=1.0;
         for(unsigned int col = 0; col < cols; ++col) {
-            if (importance_map) {
-                boost = 0.5f+ (double)*importance_map++/255.f;
-            }
+            unsigned int boost;
 
             // RGBA color is casted to long for easier hasing/comparisons
             union rgba_as_int px = {pixels[row][col]};
@@ -45,12 +36,22 @@ LIQ_PRIVATE bool pam_computeacolorhash(struct acolorhash_table *acht, const rgba
             if (!px.rgba.a) {
                 // "dirty alpha" has different RGBA values that end up being the same fully transparent color
                 px.l=0; hash=0;
-                boost = 10;
+
+                boost = 2000;
+                if (importance_map) {
+                    importance_map++;
+                }
             } else {
                 // mask posterizes all 4 channels in one go
                 px.l = (px.l & posterize_mask) | ((px.l & posterize_high_mask) >> (8-ignorebits));
                 // fancier hashing algorithms didn't improve much
                 hash = px.l % hash_size;
+
+                if (importance_map) {
+                    boost = *importance_map++;
+                } else {
+                    boost = 255;
+                }
             }
 
             if (!pam_add_to_hash(acht, hash, boost, px, row, rows)) {
@@ -64,7 +65,7 @@ LIQ_PRIVATE bool pam_computeacolorhash(struct acolorhash_table *acht, const rgba
     return true;
 }
 
-LIQ_PRIVATE bool pam_add_to_hash(struct acolorhash_table *acht, unsigned int hash, float boost, union rgba_as_int px, unsigned int row, unsigned int rows)
+LIQ_PRIVATE bool pam_add_to_hash(struct acolorhash_table *acht, unsigned int hash, unsigned int boost, union rgba_as_int px, unsigned int row, unsigned int rows)
 {
             /* head of the hash function stores first 2 colors inline (achl->used = 1..2),
                to reduce number of allocations of achl->other_items.
@@ -160,7 +161,7 @@ LIQ_PRIVATE struct acolorhash_table *pam_allocacolorhash(unsigned int maxcolors,
     const size_t estimated_colors = MIN(maxcolors, surface/(ignorebits + (surface > 512*512 ? 6 : 5)));
     const size_t hash_size = estimated_colors < 66000 ? 6673 : (estimated_colors < 200000 ? 12011 : 24019);
 
-    mempool m = NULL;
+    mempoolptr m = NULL;
     const size_t buckets_size = hash_size * sizeof(struct acolorhist_arr_head);
     const size_t mempool_size = sizeof(struct acolorhash_table) + buckets_size + estimated_colors * sizeof(struct acolorhist_arr_item);
     struct acolorhash_table *t = mempool_create(&m, sizeof(*t) + buckets_size, mempool_size, malloc, free);
@@ -175,11 +176,15 @@ LIQ_PRIVATE struct acolorhash_table *pam_allocacolorhash(unsigned int maxcolors,
     return t;
 }
 
-ALWAYS_INLINE static float pam_add_to_hist(const float *gamma_lut, hist_item *achv, unsigned int j, const struct acolorhist_arr_item *entry, const float max_perceptual_weight)
+ALWAYS_INLINE static float pam_add_to_hist(const float *gamma_lut, hist_item *achv, unsigned int *j, const struct acolorhist_arr_item *entry, const float max_perceptual_weight)
 {
-    achv[j].acolor = rgba_to_f(gamma_lut, entry->color.rgba);
-    const float w = MIN(entry->perceptual_weight, max_perceptual_weight);
-    achv[j].adjusted_weight = achv[j].perceptual_weight = w;
+    if (entry->perceptual_weight == 0) {
+        return 0;
+    }
+    const float w = MIN(entry->perceptual_weight/128.f, max_perceptual_weight);
+    achv[*j].adjusted_weight = achv[*j].perceptual_weight = w;
+    achv[*j].acolor = rgba_to_f(gamma_lut, entry->color.rgba);
+    *j += 1;
     return w;
 }
 
@@ -203,22 +208,27 @@ LIQ_PRIVATE histogram *pam_acolorhashtoacolorhist(const struct acolorhash_table 
     float max_perceptual_weight = 0.1f * acht->cols * acht->rows;
     double total_weight = 0;
 
-    for(unsigned int j=0, i=0; i < acht->hash_size; ++i) {
+    unsigned int j=0;
+    for(unsigned int i=0; i < acht->hash_size; ++i) {
         const struct acolorhist_arr_head *const achl = &acht->buckets[i];
         if (achl->used) {
-            total_weight += pam_add_to_hist(gamma_lut, hist->achv, j++, &achl->inline1, max_perceptual_weight);
+            total_weight += pam_add_to_hist(gamma_lut, hist->achv, &j, &achl->inline1, max_perceptual_weight);
 
             if (achl->used > 1) {
-                total_weight += pam_add_to_hist(gamma_lut, hist->achv, j++, &achl->inline2, max_perceptual_weight);
+                total_weight += pam_add_to_hist(gamma_lut, hist->achv, &j, &achl->inline2, max_perceptual_weight);
 
                 for(unsigned int k=0; k < achl->used-2; k++) {
-                    total_weight += pam_add_to_hist(gamma_lut, hist->achv, j++, &achl->other_items[k], max_perceptual_weight);
+                    total_weight += pam_add_to_hist(gamma_lut, hist->achv, &j, &achl->other_items[k], max_perceptual_weight);
                 }
             }
         }
     }
-
+    hist->size = j;
     hist->total_perceptual_weight = total_weight;
+    if (!j) {
+        pam_freeacolorhist(hist);
+        return NULL;
+    }
     return hist;
 }
 

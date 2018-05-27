@@ -1,20 +1,9 @@
 /*
-© 2011-2016 by Kornel Lesiński.
-
-This file is part of libimagequant.
-
-libimagequant is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-libimagequant is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with libimagequant. If not, see <http://www.gnu.org/licenses/>.
+** © 2009-2017 by Kornel Lesiński.
+** © 1989, 1991 by Jef Poskanzer.
+** © 1997, 2000, 2002 by Greg Roelofs; based on an idea by Stefan Schneider.
+**
+** See COPYRIGHT file for license.
 */
 
 #include "libimagequant.h"
@@ -32,7 +21,7 @@ struct mempool {
     void (*free)(void*);
     struct mempool *next;
 };
-LIQ_PRIVATE void* mempool_create(mempool *mptr, const unsigned int size, unsigned int max_size, void* (*malloc)(size_t), void (*free)(void*))
+LIQ_PRIVATE void* mempool_create(mempoolptr *mptr, const unsigned int size, unsigned int max_size, void* (*malloc)(size_t), void (*free)(void*))
 {
     if (*mptr && ((*mptr)->used+size) <= (*mptr)->size) {
         unsigned int prevused = (*mptr)->used;
@@ -40,7 +29,7 @@ LIQ_PRIVATE void* mempool_create(mempool *mptr, const unsigned int size, unsigne
         return ((char*)(*mptr)) + prevused;
     }
 
-    mempool old = *mptr;
+    mempoolptr old = *mptr;
     if (!max_size) max_size = (1<<17);
     max_size = size+ALIGN_MASK > max_size ? size+ALIGN_MASK : max_size;
 
@@ -60,7 +49,7 @@ LIQ_PRIVATE void* mempool_create(mempool *mptr, const unsigned int size, unsigne
     return mempool_alloc(mptr, size, size);
 }
 
-LIQ_PRIVATE void* mempool_alloc(mempool *mptr, const unsigned int size, const unsigned int max_size)
+LIQ_PRIVATE void* mempool_alloc(mempoolptr *mptr, const unsigned int size, const unsigned int max_size)
 {
     if (((*mptr)->used+size) <= (*mptr)->size) {
         unsigned int prevused = (*mptr)->used;
@@ -71,10 +60,10 @@ LIQ_PRIVATE void* mempool_alloc(mempool *mptr, const unsigned int size, const un
     return mempool_create(mptr, size, max_size, (*mptr)->malloc, (*mptr)->free);
 }
 
-LIQ_PRIVATE void mempool_destroy(mempool m)
+LIQ_PRIVATE void mempool_destroy(mempoolptr m)
 {
     while (m) {
-        mempool next = m->next;
+        mempoolptr next = m->next;
         m->free(m);
         m = next;
     }

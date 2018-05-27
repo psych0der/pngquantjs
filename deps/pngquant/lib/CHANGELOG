@@ -1,3 +1,14 @@
+version 2.11
+------------
+ - new liq_image_set_background() for high-quality remapping of GIF frames
+ - new liq_image_set_importance_map() for controlling which parts of the image get more palette colors
+ - improved OpenMP support
+
+version 2.10
+-----------
+ - supports building with Rust/Cargo
+ - new liq_histogram_add_fixed_color()
+
 version 2.9
 -----------
  - new liq_histogram_add_colors()

@@ -1,0 +1,2 @@
+emcc -03 pngquant.bc   -s USE_LIBPNG=1 -s USE_ZLIB=1  -s WASM=0 --pre-js ../../pre.js --post-js ../../post.js   -o pngquant.js
+emcc -03 pngquant.bc  -s TOTAL_MEMORY=67108864  -s USE_LIBPNG=1 -s USE_ZLIB=1  -s WASM=0 --pre-js ../../pre.js --post-js ../../post.js   -o pngquant.js

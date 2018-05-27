@@ -16,7 +16,7 @@
 # To install in $HOME instead of /usr/local, use:
 #    make install prefix=$HOME
 
-CC=/home/emsdk_portable/emscripten/master/emcc
+CC=/emsdk/emscripten/1.38.3/emcc
 
 CFLAGS= -m64 -D_LARGEFILE64_SOURCE=1 -DHAVE_HIDDEN
 #CFLAGS=-O -DMAX_WBITS=14 -DMAX_MEM_LEVEL=7
@@ -27,8 +27,8 @@ CFLAGS= -m64 -D_LARGEFILE64_SOURCE=1 -DHAVE_HIDDEN
 SFLAGS= -fPIC -m64 -D_LARGEFILE64_SOURCE=1 -DHAVE_HIDDEN
 LDFLAGS=
 TEST_LDFLAGS=-L. libz.a
-LDSHARED=/home/emsdk_portable/emscripten/master/emcc
-CPP=/home/emsdk_portable/emscripten/master/emcc -E
+LDSHARED=/emsdk/emscripten/1.38.3/emcc
+CPP=/emsdk/emscripten/1.38.3/emcc -E
 
 STATICLIB=libz.a
 SHAREDLIB=libz.so
@@ -36,9 +36,9 @@ SHAREDLIBV=libz.so.1.2.11
 SHAREDLIBM=libz.so.1
 LIBS=$(STATICLIB) $(SHAREDLIBV)
 
-AR=/home/emsdk_portable/emscripten/master/emar
+AR=/emsdk/emscripten/1.38.3/emar
 ARFLAGS=rc
-RANLIB=/home/emsdk_portable/emscripten/master/emranlib
+RANLIB=/emsdk/emscripten/1.38.3/emranlib
 LDCONFIG=ldconfig
 LDSHAREDLIBC=-lc
 TAR=tar

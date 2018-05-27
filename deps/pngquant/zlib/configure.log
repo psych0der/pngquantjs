@@ -1,0 +1,170 @@
+--------------------
+./configure --64
+Sun May 27 16:46:54 UTC 2018
+=== ztest3745.c ===
+extern int getchar();
+int hello() {return getchar();}
+===
+/emsdk/emscripten/1.38.3/emcc -c ztest3745.c
+... using gcc
+
+Checking for obsessive-compulsive compiler options...
+=== ztest3745.c ===
+int foo() { return 0; }
+===
+/emsdk/emscripten/1.38.3/emcc -c -m64 ztest3745.c
+
+Checking for shared library support...
+=== ztest3745.c ===
+extern int getchar();
+int hello() {return getchar();}
+===
+/emsdk/emscripten/1.38.3/emcc -w -c -fPIC -m64 ztest3745.c
+/emsdk/emscripten/1.38.3/emcc -fPIC -m64 -o ztest3745.so ztest3745.o
+INFO:root:generating system library: dlmalloc.bc... (this will be cached in "/root/.emscripten_cache/asmjs/dlmalloc.bc" for subsequent builds)
+INFO:root: - ok
+INFO:root:generating system library: libc.bc... (this will be cached in "/root/.emscripten_cache/asmjs/libc.bc" for subsequent builds)
+INFO:root: - ok
+INFO:root:generating system asset: generated_struct_info.json... (this will be cached in "/root/.emscripten_cache/asmjs/generated_struct_info.json" for subsequent builds)
+INFO:root: - ok
+Building shared library libz.so.1.2.11 with /emsdk/emscripten/1.38.3/emcc.
+
+=== ztest3745.c ===
+#include <stdio.h>
+#include <stdlib.h>
+size_t dummy = 0;
+===
+/emsdk/emscripten/1.38.3/emcc -c -m64 ztest3745.c
+Checking for size_t... Yes.
+
+
+=== ztest3745.c ===
+#include <sys/types.h>
+off64_t dummy = 0;
+===
+/emsdk/emscripten/1.38.3/emcc -c -m64 -D_LARGEFILE64_SOURCE=1 ztest3745.c
+Checking for off64_t... Yes.
+Checking for fseeko... Yes.
+
+=== ztest3745.c ===
+#include <string.h>
+#include <errno.h>
+int main() { return strlen(strerror(errno)); }
+===
+/emsdk/emscripten/1.38.3/emcc -m64 -D_LARGEFILE64_SOURCE=1 -o ztest3745 ztest3745.c
+Checking for strerror... Yes.
+
+=== ztest3745.c ===
+#include <unistd.h>
+int main() { return 0; }
+===
+/emsdk/emscripten/1.38.3/emcc -c -m64 -D_LARGEFILE64_SOURCE=1 ztest3745.c
+Checking for unistd.h... Yes.
+
+=== ztest3745.c ===
+#include <stdarg.h>
+int main() { return 0; }
+===
+/emsdk/emscripten/1.38.3/emcc -c -m64 -D_LARGEFILE64_SOURCE=1 ztest3745.c
+Checking for stdarg.h... Yes.
+
+=== ztest3745.c ===
+#include <stdio.h>
+#include <stdarg.h>
+#include "zconf.h"
+int main()
+{
+#ifndef STDC
+  choke me
+#endif
+  return 0;
+}
+===
+/emsdk/emscripten/1.38.3/emcc -c -m64 -D_LARGEFILE64_SOURCE=1 ztest3745.c
+Checking whether to use vs[n]printf() or s[n]printf()... using vs[n]printf().
+
+=== ztest3745.c ===
+#include <stdio.h>
+#include <stdarg.h>
+int mytest(const char *fmt, ...)
+{
+  char buf[20];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  return 0;
+}
+int main()
+{
+  return (mytest("Hello%d\n", 1));
+}
+===
+/emsdk/emscripten/1.38.3/emcc -m64 -D_LARGEFILE64_SOURCE=1 -o ztest3745 ztest3745.c
+Checking for vsnprintf() in stdio.h... Yes.
+
+=== ztest3745.c ===
+#include <stdio.h>
+#include <stdarg.h>
+int mytest(const char *fmt, ...)
+{
+  int n;
+  char buf[20];
+  va_list ap;
+  va_start(ap, fmt);
+  n = vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  return n;
+}
+int main()
+{
+  return (mytest("Hello%d\n", 1));
+}
+===
+/emsdk/emscripten/1.38.3/emcc -c -m64 -D_LARGEFILE64_SOURCE=1 ztest3745.c
+Checking for return value of vsnprintf()... Yes.
+
+=== ztest3745.c ===
+#define ZLIB_INTERNAL __attribute__((visibility ("hidden")))
+int ZLIB_INTERNAL foo;
+int main()
+{
+  return 0;
+}
+===
+/emsdk/emscripten/1.38.3/emcc -c -m64 -D_LARGEFILE64_SOURCE=1 ztest3745.c
+Checking for attribute(visibility) support... Yes.
+
+ALL = static shared all64
+AR = /emsdk/emscripten/1.38.3/emar
+ARFLAGS = rc
+CC = /emsdk/emscripten/1.38.3/emcc
+CFLAGS = -m64 -D_LARGEFILE64_SOURCE=1 -DHAVE_HIDDEN
+CPP = /emsdk/emscripten/1.38.3/emcc -E
+EXE =
+LDCONFIG = ldconfig
+LDFLAGS =
+LDSHARED = /emsdk/emscripten/1.38.3/emcc
+LDSHAREDLIBC = -lc
+OBJC = $(OBJZ) $(OBJG)
+PIC_OBJC = $(PIC_OBJZ) $(PIC_OBJG)
+RANLIB = /emsdk/emscripten/1.38.3/emranlib
+SFLAGS = -fPIC -m64 -D_LARGEFILE64_SOURCE=1 -DHAVE_HIDDEN
+SHAREDLIB = libz.so
+SHAREDLIBM = libz.so.1
+SHAREDLIBV = libz.so.1.2.11
+STATICLIB = libz.a
+TEST = all teststatic testshared test64
+VER = 1.2.11
+Z_U4 =
+SRCDIR =
+exec_prefix = ${prefix}
+includedir = ${prefix}/include
+libdir = ${exec_prefix}/lib
+mandir = ${prefix}/share/man
+prefix = /usr/local
+sharedlibdir = ${libdir}
+uname = Linux
+--------------------
+
+

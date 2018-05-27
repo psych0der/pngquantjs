@@ -17,7 +17,7 @@ The [library](https://pngquant.org/lib) is currently a part of the [pngquant2 pr
 
 ## Compiling and Linking
 
-The library can be linked with ANSI C, C++, [Rust](https://github.com/pornel/libimagequant-rust) and [Java](https://github.com/ImageOptim/libimagequant/tree/master/org/pngquant) programs. It has no external dependencies.
+The library can be linked with ANSI C, C++, [C#](https://github.com/ImageOptim/libimagequant/blob/master/libimagequant.cs), [Rust](https://github.com/pornel/libimagequant-rust), [Java](https://github.com/ImageOptim/libimagequant/tree/master/org/pngquant) and [Golang](https://github.com/larrabee/go-imagequant) programs. It has no external dependencies.
 
 To build on Unix-like systems run:
 
@@ -33,8 +33,11 @@ Alternatively you can compile the library with your program simply by including 
 
     gcc -std=c99 -O3 -DNDEBUG libimagequant/*.c yourprogram.c
 
-In [Rust](https://github.com/pornel/libimagequant-rust),
-if using Cargo, add [`imagequant`](https://crates.io/crates/imagequant/) to dependencies.
+### Building for use in Rust programs
+
+In [Rust](https://www.rust-lang.org/) you can use Cargo to build the library. Add [`imagequant`](https://crates.io/crates/imagequant) to dependencies of the Rust program. You can also use `cargo build` in [`imagequant-sys`](https://crates.io/crates/imagequant-sys) to build `libimagequant.a` for any C-compatible language.
+
+### Building for Java JNI
 
 To build Java JNI interface, ensure `JAVA_HOME` is set to your JDK directory, and run:
 
@@ -49,8 +52,21 @@ On Windows run `make java-dll` and it'll create `libimagequant.dll` instead.
 
 The library can be compiled with any C compiler that has at least basic support for C99 (GCC, clang, ICC, C++ Builder, even Tiny C Compiler), but Visual Studio 2012 and older are not up to date with the 1999 C standard. There are 2 options for using `libimagequant` on Windows:
 
- * Use Visual Studio **2013** (MSVC 18) and an [MSVC-compatible branch of the library](https://github.com/ImageOptim/libimagequant/tree/msvc)
- * Or use GCC from [MinGW](http://www.mingw.org). Use GCC to build `libimagequant.a` (using the instructions above for Unix) and add it along with `libgcc.a` (shipped with the MinGW compiler) to your VC project.
+ * Use Visual Studio **2015** and an [MSVC-compatible branch of the library](https://github.com/ImageOptim/libimagequant/tree/msvc)
+ * Or use GCC from [MinGW](http://www.mingw.org) or [MSYS2](http://www.msys2.org/). Use GCC to build `libimagequant.a` (using the instructions above for Unix) and add it along with `libgcc.a` (shipped with the MinGW compiler) to your VC project.
+
+### Building as shared library
+
+To build on Unix-like systems run:
+
+    ./configure --prefix=/usr
+    make libimagequant.so
+
+To install on Unix-like systems run:
+
+    make install
+
+
 
 ## Overview
 
@@ -65,6 +81,7 @@ The basic flow is:
 Please note that libimagequant only handles raw uncompressed arrays of pixels in memory and is completely independent of any file format.
 
 <p>
+    /* See example.c for the full code! */
 
     #include "libimagequant.h"
 
@@ -98,6 +115,8 @@ There are 3 ways to create image object for quantization:
   * `liq_image_create_custom()` for RGB, ABGR, YUV and all other formats that can be converted on-the-fly to RGBA (you have to supply the conversion function).
 
 Note that "image" here means raw uncompressed pixels. If you have a compressed image file, such as PNG, you must use another library (e.g. libpng or lodepng) to decode it first.
+
+You'll find full example code in "example.c" file in the library source directory.
 
 ## Functions
 
@@ -133,7 +152,7 @@ Quality is in range `0` (worst) to `100` (best) and values are analoguous to JPE
 
 Quantization will attempt to use the lowest number of colors needed to achieve `maximum` quality. `maximum` value of `100` is the default and means conversion as good as possible.
 
-If it's not possible to convert the image with at least `minimum` quality (i.e. 256 colors is not enough to meet the minimum quality), then `liq_image_quantize()` will fail. The default minumum is `0` (proceeds regardless of quality).
+If it's not possible to convert the image with at least `minimum` quality (i.e. 256 colors is not enough to meet the minimum quality), then `liq_image_quantize()` will fail. The default minimum is `0` (proceeds regardless of quality).
 
 Quality measures how well the generated palette fits image given to `liq_image_quantize()`. If a different image is remapped with `liq_write_remapped_image()` then actual quality may be different.
 
@@ -391,6 +410,32 @@ Returns `LIQ_VALUE_OUT_OF_RANGE` if invalid flags are specified or the image obj
 
 ----
 
+    liq_error liq_image_set_background(liq_image *image, liq_image *background_image);
+
+Analyze and remap this image with assumption that it will be always presented exactly on top of this background.
+
+When this image is remapped to a palette with a fully transparent color (use `liq_image_add_fixed_color()` to ensure this) pixels that are better represented by the background than the palette will be made transparent. This function can be used to improve quality of animated GIFs by setting previous animation frame as the background.
+
+This function takes full ownership of the background image, so you should **not** free the background object. It will be freed automatically together with the foreground image.
+
+Returns `LIQ_BUFFER_TOO_SMALL` if the background image has a different size than the foreground.
+
+----
+
+    liq_error liq_image_set_importance_map(liq_image *image, unsigned char map[], size_t buffer_size, liq_ownership ownership);
+
+Impotance map controls which areas of the image get more palette colors. Pixels corresponding to 0 values in the map are completely ignored. The higher the value the more weight is placed on the given pixel, giving it higher chance of influencing the final palette.
+
+The map is one byte per pixel and must have the same size as the image (width×height bytes). `buffer_size` argument is used to double-check that.
+
+If the `ownership` is `LIQ_COPY_PIXELS` then the `map` content be copied immediately (it's up to you to ensure the `map` memory is freed).
+
+If the `ownership` is `LIQ_OWN_PIXELS` then the `map` memory will be owned by the image and will be freed automatically when the image is freed. If a custom allocator has been set using `liq_attr_create_with_allocator()`, the `map` must be allocated using the same allocator.
+
+Returns `LIQ_INVALID_POINTER` if any pointer is `NULL`, `LIQ_BUFFER_TOO_SMALL` if the `buffer_size` does not match the image size, and `LIQ_UNSUPPORTED` if `ownership` isn't a valid value.
+
+----
+
     liq_error liq_write_remapped_image_rows(liq_result *result, liq_image *input_image, unsigned char **row_pointers);
 
 Similar to `liq_write_remapped_image()`. Writes remapped image, at 1 byte per pixel, to each row pointed by `row_pointers` array. The array must have at least as many elements as height of the image, and each row must have at least as many bytes as width of the image. Rows must not overlap.
@@ -526,6 +571,7 @@ If the input is invalid, these all return -1.
 ---
 
     liq_error liq_image_add_fixed_color(liq_image* img, liq_color color);
+    liq_error liq_histogram_add_fixed_color(liq_histogram *hist, liq_color color);
 
 Reserves a color in the output palette created from this image. It behaves as if the given color was used in the image and was very important.
 
@@ -601,6 +647,12 @@ Generates palette from the histogram. On success returns `LIQ_OK` and writes `li
 Returns `LIQ_QUALITY_TOO_LOW` if the palette is worse than limit set in `liq_set_quality()`. One histogram object can be quantized only once.
 
 Palette generated using this function won't be improved during remapping. If you're generating palette for only one image, it's better to use `liq_image_quantize()`.
+
+## Working with GIF
+
+The library can generate palettes for GIF images. To ensure correct transparency is used you need to preprocess the image yourself and replace alpha values other than 0 or 255 with one of these.
+
+For animated GIFs see `liq_image_set_background()` which remaps images for GIF's "keep" frame disposal method. See [gif.ski](https://gif.ski).
 
 ## Multithreading
 

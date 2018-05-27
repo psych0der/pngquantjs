@@ -1,69 +1,52 @@
 -include config.mk
 
+LIQSRCDIR ?= lib
 BIN ?= pngquant
 BINPREFIX ?= $(DESTDIR)$(PREFIX)/bin
 MANPREFIX ?= $(DESTDIR)$(PREFIX)/share/man
 
-OBJS = pngquant.o rwpng.o
-COCOA_OBJS = rwpng_cocoa.o
+OBJS = pngquant.o pngquant_opts.o rwpng.o
 
-ifeq (1, $(COCOA_READER))
-OBJS += $(COCOA_OBJS)
-endif
-
-STATICLIB = lib/libimagequant.a
-SHAREDLIB = lib/libimagequant.so
-
-DISTFILES = *.[chm] pngquant.1 Makefile configure README.md INSTALL CHANGELOG COPYRIGHT
+STATICLIB = $(LIQSRCDIR)/libimagequant.a
+DISTFILES = *.[chm] pngquant.1 Makefile configure README.md INSTALL CHANGELOG COPYRIGHT Cargo.toml
 TARNAME = pngquant-$(VERSION)
 TARFILE = $(TARNAME)-src.tar.gz
 
-LIBDISTFILES = lib/*.[ch] lib/COPYRIGHT lib/README.md lib/configure lib/Makefile
+LIBDISTFILES = $(LIQSRCDIR)/*.[ch] $(LIQSRCDIR)/COPYRIGHT $(LIQSRCDIR)/README.md $(LIQSRCDIR)/configure $(LIQSRCDIR)/Makefile $(LIQSRCDIR)/Cargo.toml
 
 TESTBIN = test/test
 
 all: $(BIN)
 
-staticlib: $(STATICLIB)
+$(LIQSRCDIR)/config.mk: config.mk
+	( cd '$(LIQSRCDIR)'; ./configure $(LIQCONFIGUREFLAGS) )
 
-$(STATICLIB): config.mk $(LIBDISTFILES)
-	$(MAKE) -C lib static
-
-sharedlib: lib/libimagequant.h
-	$(MAKE) -C lib shared
-
-$(SHAREDLIB): config.mk sharedlib
+$(STATICLIB): $(LIQSRCDIR)/config.mk $(LIBDISTFILES)
+	$(MAKE) -C '$(LIQSRCDIR)' static
 
 $(OBJS): $(wildcard *.h) config.mk
 
-rwpng_cocoa.o: rwpng_cocoa.m
-	$(CC) -Wno-enum-conversion -c $(CFLAGS) -o $@ $< &> /dev/null || clang -Wno-enum-conversion -c -O3 -o $@ $<
+$(BIN): $(OBJS) $(STATICLIBDEPS)
+	$(CC) $(OBJS) $(CFLAGS) $(LDFLAGS) -o $@
 
-$(BIN): $(OBJS) $(STATICLIB)
-	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $@
-
-$(TESTBIN): test/test.o $(STATICLIB)
-	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $@
+$(TESTBIN): test/test.o $(STATICLIBDEPS)
+	$(CC) test/test.o $(CFLAGS) $(LDFLAGS) -o $@
 
 test: $(BIN) $(TESTBIN)
-	./test/test.sh ./test $(BIN) $(TESTBIN)
-
-bin.shared: $(OBJS) $(SHAREDLIB)
-	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $(BIN)
-
-testbin.shared: test/test.o $(SHAREDLIB)
-	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $(TESTBIN)
-
-test.shared: bin.shared testbin.shared
-	./test/test.sh ./test $(BIN) $(TESTBIN)
+	LD_LIBRARY_PATH='$(LIQSRCDIR)' ./test/test.sh ./test $(BIN) $(TESTBIN)
 
 dist: $(TARFILE)
 
 $(TARFILE): $(DISTFILES)
+	test -n "$(VERSION)"
+	make -C $(LIQSRCDIR) cargo
 	rm -rf $(TARFILE) $(TARNAME)
-	mkdir -p $(TARNAME)/lib
+	mkdir -p $(TARNAME)/lib/rust $(TARNAME)/lib/msvc-dist $(TARNAME)/rust
 	cp $(DISTFILES) $(TARNAME)
+	cp rust/*.rs $(TARNAME)/rust/
 	cp $(LIBDISTFILES) $(TARNAME)/lib
+	cp $(LIQSRCDIR)/rust/*.rs $(TARNAME)/lib/rust/
+	cp $(LIQSRCDIR)/msvc-dist/*.[ch] $(TARNAME)/lib/msvc-dist/
 	tar -czf $(TARFILE) --numeric-owner --exclude='._*' $(TARNAME)
 	rm -rf $(TARNAME)
 	-shasum $(TARFILE)
@@ -79,20 +62,17 @@ uninstall:
 	rm -f '$(MANPREFIX)/man1/$(BIN).1'
 
 clean:
-	$(MAKE) -C lib clean
-	rm -f '$(BIN)' $(OBJS) $(COCOA_OBJS) $(STATICLIB) $(TARFILE)
+	-test -n '$(LIQSRCDIR)' && $(MAKE) -C '$(LIQSRCDIR)' clean
+	rm -f '$(BIN)' $(OBJS) $(TARFILE)
 
 distclean: clean
-	$(MAKE) -C lib distclean
+	-test -n '$(LIQSRCDIR)' && $(MAKE) -C '$(LIQSRCDIR)' distclean
 	rm -f config.mk pngquant-*-src.tar.gz
 
-config.mk: lib/libimagequant.h
+config.mk: Makefile
 ifeq ($(filter %clean %distclean, $(MAKECMDGOALS)), )
 	./configure
 endif
 
-lib/libimagequant.h:
-	git submodule init && git submodule update || true
-
-.PHONY: all clean dist distclean dll install uninstall test staticlib
+.PHONY: all clean dist distclean dll install uninstall test
 .DELETE_ON_ERROR:

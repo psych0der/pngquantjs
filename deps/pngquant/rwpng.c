@@ -1,36 +1,11 @@
-/*---------------------------------------------------------------------------
-
-   pngquant:  RGBA -> RGBA-palette quantization program             rwpng.c
-
-  ---------------------------------------------------------------------------
-
-   © 1998-2000 by Greg Roelofs.
-   © 2009-2015 by Kornel Lesiński.
-
-   All rights reserved.
-
-   Redistribution and use in source and binary forms, with or without modification,
-   are permitted provided that the following conditions are met:
-
-   1. Redistributions of source code must retain the above copyright notice,
-      this list of conditions and the following disclaimer.
-
-   2. Redistributions in binary form must reproduce the above copyright notice,
-      this list of conditions and the following disclaimer in the documentation
-      and/or other materials provided with the distribution.
-
-   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-   DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-   FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-   CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-   OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-  ---------------------------------------------------------------------------*/
+/*
+** PNG read/write functions
+**
+** © 1998-2000 by Greg Roelofs.
+** © 2009-2017 by Kornel Lesiński.
+**
+** See COPYRIGHT file for license.
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,7 +36,7 @@ typedef png_const_charp png_const_bytep;
 #endif
 
 static void rwpng_error_handler(png_structp png_ptr, png_const_charp msg);
-int rwpng_read_image24_cocoa(FILE *infile, png24_image *mainprog_ptr);
+pngquant_error rwpng_read_image32_cocoa(FILE *infile, uint32_t *width, uint32_t *height, size_t *file_size, rwpng_rgba **image_data);
 
 
 void rwpng_version_info(FILE *fp)
@@ -457,12 +432,25 @@ void rwpng_free_image8(png8_image *image)
     image->chunks = NULL;
 }
 
-pngquant_error rwpng_read_image24(FILE *infile, png24_image *input_image_p, int strip, int verbose)
+pngquant_error rwpng_read_image24(FILE *infile, png24_image *out, int strip, int verbose)
 {
 #if USE_COCOA
-    return rwpng_read_image24_cocoa(infile, input_image_p);
+    rwpng_rgba *pixel_data;
+    pngquant_error res = rwpng_read_image32_cocoa(infile, &out->width, &out->height, &out->file_size, &pixel_data);
+    if (res != SUCCESS) {
+        return res;
+    }
+    out->gamma = 0.45455;
+    out->input_color = RWPNG_COCOA;
+    out->output_color = RWPNG_SRGB;
+    out->rgba_data = (unsigned char *)pixel_data;
+    out->row_pointers = malloc(sizeof(out->row_pointers[0])*out->height);
+    for(int i=0; i < out->height; i++) {
+        out->row_pointers[i] = (unsigned char *)&pixel_data[out->width*i];
+    }
+    return SUCCESS;
 #else
-    return rwpng_read_image24_libpng(infile, input_image_p, strip, verbose);
+    return rwpng_read_image24_libpng(infile, out, strip, verbose);
 #endif
 }
 
