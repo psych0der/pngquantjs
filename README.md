@@ -9,5 +9,7 @@ docker pull psych0der/emscripten` command. I would recommend using docker image 
 
 ### Demo
 [https://psych0der.github.io/pngquantjs/](https://psych0der.github.io/pngquantjs/)
-### Licence
-MIT
+
+## License
+
+* Under **GPL v3** with an additional [copyright notice](https://github.com/kornelski/pngquant/blob/master/COPYRIGHT)
