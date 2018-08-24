@@ -22,9 +22,7 @@ function pngquant(file, options, printF) {
 
 	/* Create command line options to passed using input `options` object */
 	for (var key in options) {
-		if (!options.hasOwnProperty(key)) continue;
-		/* Prepend -- to option key name */
-		if (options[key]) {
+		if (typeof options[key]=='string') {
 			args.push("--" + key);
 			args.push(options[key]);
 		}
