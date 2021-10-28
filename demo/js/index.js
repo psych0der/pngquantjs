@@ -63,6 +63,24 @@
         return u8arr;
     }
 
+    var getImgWithColorPreset=(dataURL,callback)=>{
+        //console.log(dataURL);
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        if (!context) callback(dataURL);
+        const img = new Image();
+        img.onload=()=>{
+            const width = img.naturalWidth;
+            const height = img.naturalHeight;
+            canvas.width = width;
+            canvas.height = height;
+            context.drawImage(img, 0, 0);
+            //console.log(width,height,canvas.toDataURL('image/png'));
+            callback(canvas.toDataURL('image/png'));
+        }
+        img.src = dataURL;
+    }
+
     /* event handler for image picker */
     var readURL = function(file) {
         var dataUrlReader = new FileReader();
@@ -71,10 +89,11 @@
             $('#input-file-stats').innerHTML = 'Input image [' + readableFileSize(file.size) + ']';
             $('#terminal').style.display = 'block';
             $('#file-dropper').style.display = 'none';
-            inputImageData = dataURLtoUint8(e.target.result);
+            getImgWithColorPreset(e.target.result,(data)=>{
+                inputImageData = dataURLtoUint8(data);
+            })
         }
         dataUrlReader.readAsDataURL(file);
-
     }
 
     function getRangeSliderValue() {
